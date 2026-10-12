@@ -9,38 +9,153 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-    * { font-family: 'Plus Jakarta Sans', sans-serif; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
-    body { background: #09130d; color: #f1f5f9; overflow: hidden; }
+    * {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #09130d;
+      color: #f1f5f9;
+    }
+    body.app {
+      display: flex;
+      flex-direction: column;
+      padding: 0.35rem;
+      gap: 0.25rem;
+    }
+    @media (min-width: 640px) {
+      body.app { padding: 0.75rem; gap: 0.5rem; }
+    }
+
     .modal-panel.hidden { display: none !important; }
-    .modal-panel:not(.hidden) { display: flex !important; }
+    .modal-panel:not(.hidden) {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 0.75rem;
+    }
+    .modal-card {
+      width: 100%;
+      max-width: 28rem;
+      max-height: min(92dvh, 920px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .poker-table-outer {
       background: radial-gradient(ellipse at center, #1e2e21 0%, #0d170f 80%, #050a06 100%);
-      box-shadow: inset 0 0 80px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.9);
-      border: 14px solid #3d2314; border-radius: 200px; position: relative;
+      box-shadow: inset 0 0 50px rgba(0,0,0,0.75), 0 10px 30px rgba(0,0,0,0.7);
+      border: 8px solid #3d2314;
+      border-radius: 48% / 42%;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
     }
-    @media (max-width: 640px) { .poker-table-outer { border-width: 8px; border-radius: 100px; } }
-    .poker-table-inner { border: 2px solid rgba(212,175,55,0.25); border-radius: 180px; position: relative; width: 100%; height: 100%; }
-    .poker-card { box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    @media (min-width: 640px) {
+      .poker-table-outer {
+        border-width: 12px;
+        border-radius: 50% / 44%;
+      }
+    }
+    .poker-table-inner {
+      border: 1.5px solid rgba(212,175,55,0.25);
+      border-radius: 46% / 40%;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    .poker-card { box-shadow: 0 3px 8px rgba(0,0,0,0.45); flex-shrink: 0; }
+    .custom-scroll::-webkit-scrollbar { width: 3px; }
     .custom-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
-    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
     button:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-    .seat-option, .diff-option, .table-option {
-      cursor: pointer; transition: all 0.15s ease;
-    }
-    .seat-option.selected, .diff-option.selected, .table-option.selected {
+    button { min-height: 44px; }
+
+    .diff-option, .table-option, .online-table-option { cursor: pointer; transition: all 0.15s ease; }
+    .diff-option.selected, .table-option.selected, .online-table-option.selected {
       border-color: #f59e0b !important;
       background: rgba(245, 158, 11, 0.15) !important;
       box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
     }
-    .player-seat { position: absolute; z-index: 20; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -50%); }
+
+    .player-seat {
+      position: absolute;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transform: translate(-50%, -50%);
+      max-width: 72px;
+      pointer-events: none;
+    }
+    @media (min-width: 640px) {
+      .player-seat { max-width: 100px; }
+    }
+
+    #centerZone {
+      z-index: 30;
+      pointer-events: none;
+      max-width: 92%;
+    }
+    #communityCards {
+      min-height: 3.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: nowrap;
+    }
+    @media (min-width: 640px) {
+      #communityCards { min-height: 4.5rem; }
+    }
+
+    /* Header compact mobile */
+    #appHeader {
+      flex-shrink: 0;
+      gap: 0.35rem;
+    }
+    #appFooter {
+      flex-shrink: 0;
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+    #appMain {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Action buttons: always tappable on phone */
+    #actionButtons button {
+      min-height: 52px;
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
+    @media (max-width: 400px) {
+      #actionButtons button span { font-size: 0.65rem; }
+      #actionButtons { gap: 0.35rem; }
+    }
   </style>
 </head>
-<body class="h-screen w-screen flex flex-col justify-between p-2 sm:p-4 relative">
+<body class="app relative">
 
   <!-- ========== MENU DÉMARRAGE ========== -->
-  <div id="startMenu" class="modal-panel fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-amber-500/30 rounded-3xl w-full max-w-lg p-5 sm:p-7 space-y-5 shadow-2xl">
+  <div id="startMenu" class="modal-panel fixed inset-0 bg-black/90 backdrop-blur-md z-[60]">
+    <div class="modal-card bg-slate-900 border border-amber-500/30 rounded-2xl sm:rounded-3xl p-4 sm:p-7 space-y-4 sm:space-y-5 shadow-2xl">
       <div class="text-center space-y-1">
         <div class="text-4xl text-amber-400 mb-2"><i class="fa-solid fa-spade"></i></div>
         <h1 class="text-2xl sm:text-3xl font-black text-amber-300">Texas Hold'em Pro</h1>
@@ -101,8 +216,8 @@
   </div>
 
   <!-- ========== MODAL GAGNANT ========== -->
-  <div id="winnerModal" class="modal-panel hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[55] flex items-center justify-center p-4">
-    <div class="bg-slate-900 border-2 border-amber-400/60 rounded-3xl w-full max-w-md p-6 text-center space-y-4 shadow-2xl">
+  <div id="winnerModal" class="modal-panel hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[55]">
+    <div class="modal-card bg-slate-900 border-2 border-amber-400/60 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-center space-y-3 sm:space-y-4 shadow-2xl">
       <div class="text-5xl">🏆</div>
       <h2 class="text-xl sm:text-2xl font-black text-amber-300" id="winnerTitle">Victoire !</h2>
       <p class="text-sm text-slate-300" id="winnerSubtitle">remporte le pot</p>
@@ -118,7 +233,7 @@
     </div>
   </div>
 
-  <header class="w-full max-w-6xl mx-auto flex items-center justify-between bg-emerald-950/60 backdrop-blur-md px-3 sm:px-5 py-2 rounded-2xl border border-emerald-500/20 z-30">
+  <header id="appHeader" class="w-full max-w-6xl mx-auto flex items-center justify-between bg-emerald-950/70 backdrop-blur-md px-2 sm:px-5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-emerald-500/20 z-30">
     <div class="flex items-center gap-2 sm:gap-3">
       <div class="bg-amber-500/20 text-amber-400 p-2 rounded-xl border border-amber-500/30">
         <i class="fa-solid fa-spade text-lg sm:text-xl"></i>
@@ -156,21 +271,22 @@
     </div>
   </header>
 
-  <main class="flex-1 w-full max-w-5xl mx-auto my-2 relative flex items-center justify-center">
-    <div class="poker-table-outer w-full h-full max-h-[580px] flex items-center justify-center p-3 sm:p-8">
+  <main id="appMain" class="w-full max-w-6xl mx-auto relative">
+    <div class="poker-table-outer flex items-center justify-center p-1.5 sm:p-5">
       <div class="poker-table-inner" id="tableInner">
         <div id="seatsContainer"></div>
-        <div class="absolute inset-0 flex flex-col items-center justify-center z-10 space-y-2 sm:space-y-3 pointer-events-none">
+        <!-- Zone centrale (cartes communes) au-dessus des sièges -->
+        <div id="centerZone" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-2xl bg-black/35 border border-emerald-500/20 backdrop-blur-sm shadow-xl">
           <div class="flex items-center gap-2 pointer-events-auto">
-            <span id="phaseBadge" class="bg-black/60 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow">Pré-Flop</span>
+            <span id="phaseBadge" class="bg-black/70 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow">Pré-Flop</span>
             <span id="roomCodeBadge" class="hidden bg-indigo-900/80 border border-indigo-400/40 text-indigo-200 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full tracking-widest"></span>
           </div>
-          <div id="communityCards" class="flex gap-1.5 sm:gap-2.5 my-1"></div>
-          <div class="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+          <div id="communityCards" class="flex gap-1 sm:gap-2 my-0.5"></div>
+          <div class="flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full border border-white/10">
             <div class="flex -space-x-1.5">
-              <span class="w-4 h-4 rounded-full bg-red-600 border border-white/40 shadow-sm inline-block"></span>
-              <span class="w-4 h-4 rounded-full bg-blue-600 border border-white/40 shadow-sm inline-block"></span>
-              <span class="w-4 h-4 rounded-full bg-amber-500 border border-white/40 shadow-sm inline-block"></span>
+              <span class="w-3.5 h-3.5 rounded-full bg-red-600 border border-white/40 shadow-sm inline-block"></span>
+              <span class="w-3.5 h-3.5 rounded-full bg-blue-600 border border-white/40 shadow-sm inline-block"></span>
+              <span class="w-3.5 h-3.5 rounded-full bg-amber-500 border border-white/40 shadow-sm inline-block"></span>
             </div>
             <span id="centerPotText" class="text-xs sm:text-sm font-black text-amber-300">Pot: 0 $</span>
           </div>
@@ -179,9 +295,9 @@
     </div>
   </main>
 
-  <footer class="w-full max-w-4xl mx-auto bg-slate-950/90 backdrop-blur-xl border border-slate-800 rounded-2xl p-2.5 sm:p-4 z-30 shadow-2xl">
+  <footer id="appFooter" class="w-full max-w-4xl mx-auto bg-slate-950/95 backdrop-blur-xl border border-slate-800 rounded-xl sm:rounded-2xl p-2 sm:p-4 z-30 shadow-2xl">
     <!-- Indicateur visuel de la main en cours -->
-    <div id="handStrengthPanel" class="mb-2.5 px-2 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80">
+    <div id="handStrengthPanel" class="mb-1.5 sm:mb-2.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-slate-900/80 border border-slate-700/80">
       <div class="flex items-center justify-between gap-2 mb-1.5">
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider shrink-0">Ta main</span>
@@ -218,7 +334,7 @@
       <input type="range" id="raiseSlider" min="10" max="1000" step="5" class="w-full accent-amber-500 cursor-pointer h-2 bg-slate-800 rounded-lg">
       <button type="button" onclick="playerAction('raise')" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2 rounded-lg text-sm transition active:scale-95">Confirmer la Relance</button>
     </div>
-    <div id="actionButtons" class="grid grid-cols-4 gap-1.5 sm:gap-3">
+    <div id="actionButtons" class="grid grid-cols-4 gap-1 sm:gap-3">
       <button id="btnFold" type="button" onclick="playerAction('fold')" class="bg-rose-900/80 hover:bg-rose-800 active:scale-95 text-rose-200 py-2.5 sm:py-3 px-1 rounded-xl font-extrabold text-xs sm:text-sm border border-rose-700/50 transition flex flex-col items-center justify-center shadow">
         <i class="fa-solid fa-xmark text-sm sm:text-base mb-0.5"></i><span>Coucher</span>
       </button>
@@ -242,8 +358,8 @@
     </div>
   </footer>
 
-  <div id="logModal" class="modal-panel hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-4 sm:p-6 space-y-4 shadow-2xl">
+  <div id="logModal" class="modal-panel hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50">
+    <div class="modal-card bg-slate-900 border border-slate-700 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
         <h3 class="text-base sm:text-lg font-bold text-amber-300 flex items-center gap-2"><i class="fa-solid fa-list-ul"></i> Journal</h3>
         <button type="button" onclick="toggleLogModal()" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -252,8 +368,8 @@
     </div>
   </div>
 
-  <div id="rebuyModal" class="modal-panel hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border-2 border-amber-500/50 rounded-2xl w-full max-w-md p-6 text-center space-y-4 shadow-2xl">
+  <div id="rebuyModal" class="modal-panel hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50">
+    <div class="modal-card bg-slate-900 border-2 border-amber-500/50 rounded-2xl p-5 sm:p-6 text-center space-y-3 sm:space-y-4 shadow-2xl">
       <div class="text-5xl text-amber-400"><i class="fa-solid fa-coins"></i></div>
       <h3 class="text-2xl font-black text-white">Tapis Épuisé !</h3>
       <p class="text-sm text-slate-300">Effectuer un rebuy de 1 000 $ pour continuer ?</p>
@@ -261,8 +377,8 @@
     </div>
   </div>
 
-  <div id="onlineModal" class="modal-panel hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-indigo-500/40 rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+  <div id="onlineModal" class="modal-panel hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50">
+    <div class="modal-card bg-slate-900 border border-indigo-500/40 rounded-2xl p-4 sm:p-6 space-y-3 sm:space-y-4 shadow-2xl">
       <div class="flex justify-between items-center border-b border-slate-800 pb-3">
         <h3 class="text-lg font-bold text-indigo-300 flex items-center gap-2"><i class="fa-solid fa-users"></i> Jouer en ligne</h3>
         <button type="button" onclick="closeOnlineModal()" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -274,6 +390,24 @@
       <div class="bg-slate-800/60 rounded-xl p-3 text-xs text-slate-300">
         <i class="fa-solid fa-wallet text-amber-400 mr-1"></i>
         Cagnotte : <span id="onlineBankrollPreview" class="font-black text-amber-300">1000 $</span>
+      </div>
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Taille de table (hôte)</p>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-online-table="4" class="online-table-option selected border border-slate-600 rounded-xl p-2.5 text-center bg-slate-800/80">
+            <div class="text-lg font-black text-white">4</div>
+            <div class="text-[9px] text-slate-400">joueurs</div>
+          </button>
+          <button type="button" data-online-table="6" class="online-table-option border border-slate-600 rounded-xl p-2.5 text-center bg-slate-800/80">
+            <div class="text-lg font-black text-white">6</div>
+            <div class="text-[9px] text-slate-400">joueurs</div>
+          </button>
+          <button type="button" data-online-table="8" class="online-table-option border border-slate-600 rounded-xl p-2.5 text-center bg-slate-800/80">
+            <div class="text-lg font-black text-white">8</div>
+            <div class="text-[9px] text-slate-400">joueurs</div>
+          </button>
+        </div>
+        <p class="text-[10px] text-slate-500 mt-1.5">Les places vides seront comblées par des bots.</p>
       </div>
       <button type="button" onclick="createOnlineRoom()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl transition flex items-center justify-center gap-2">
         <i class="fa-solid fa-plus"></i> Créer une table
@@ -316,29 +450,30 @@ const SAVE_KEY = 'texasHoldemPro_bankroll';
 
 // Positions en % (left, top) — joueur humain toujours en bas (index 0)
 const SEAT_LAYOUTS = {
+  // Optimisé portrait téléphone : joueurs dans les angles, centre libre
   4: [
-    { left: 50, top: 92 },
-    { left: 12, top: 40 },
-    { left: 50, top: 8 },
-    { left: 88, top: 40 }
+    { left: 50, top: 86 },
+    { left: 12, top: 20 },
+    { left: 50, top: 11 },
+    { left: 88, top: 20 }
   ],
   6: [
-    { left: 50, top: 92 },
-    { left: 12, top: 65 },
-    { left: 12, top: 25 },
-    { left: 50, top: 8 },
-    { left: 88, top: 25 },
-    { left: 88, top: 65 }
+    { left: 50, top: 86 },
+    { left: 11, top: 70 },
+    { left: 11, top: 22 },
+    { left: 50, top: 11 },
+    { left: 89, top: 22 },
+    { left: 89, top: 70 }
   ],
   8: [
-    { left: 50, top: 92 },
-    { left: 18, top: 78 },
+    { left: 50, top: 87 },
+    { left: 14, top: 76 },
     { left: 8, top: 50 },
-    { left: 18, top: 22 },
-    { left: 50, top: 8 },
-    { left: 82, top: 22 },
+    { left: 14, top: 20 },
+    { left: 50, top: 10 },
+    { left: 86, top: 20 },
     { left: 92, top: 50 },
-    { left: 82, top: 78 }
+    { left: 86, top: 76 }
   ]
 };
 
@@ -638,11 +773,15 @@ function createOnlineRoom() {
     setOnlineStatus('PeerJS non chargé. Vérifie ta connexion internet et recharge la page.', true);
     return;
   }
-  tableSize = 4;
+  // Taille choisie dans le modal (sinon tableSize solo)
+  const selectedOnline = document.querySelector('.online-table-option.selected');
+  if (selectedOnline) tableSize = parseInt(selectedOnline.dataset.onlineTable, 10) || 4;
+  tableSize = [4, 6, 8].includes(tableSize) ? tableSize : 4;
+
   const name = (document.getElementById('onlineNameInput').value || 'Hôte').trim().slice(0, 12);
   localStorage.setItem('poker_name', name);
   roomCode = genRoomCode();
-  setOnlineStatus('Création de la table...');
+  setOnlineStatus('Création de la table (' + tableSize + ' places)...');
   destroyPeer();
 
   try {
@@ -657,21 +796,22 @@ function createOnlineRoom() {
     gameMode = 'host';
     mySeatIdx = 0;
     const bankroll = loadBankroll();
-    players = makePlayers(4, bankroll > 0 ? bankroll : 1000);
+    players = makePlayers(tableSize, bankroll > 0 ? bankroll : 1000);
     players[0].name = name;
     players[0].peerId = id;
+    // Sièges 1..n restent bots jusqu'à ce que des amis rejoignent
     buildSeatsDOM();
     document.getElementById('startMenu').classList.add('hidden');
     document.getElementById('hostRoomCode').innerText = roomCode;
     document.getElementById('hostRoomInfo').classList.remove('hidden');
     document.getElementById('roomCodeBadge').classList.remove('hidden');
     document.getElementById('roomCodeBadge').innerText = 'CODE ' + roomCode;
-    document.getElementById('tableSubtitle').innerText = 'En ligne — Hôte';
-    setOnlineStatus('Table prête — code ' + roomCode + '. En attente d\'amis...');
+    document.getElementById('tableSubtitle').innerText = 'En ligne ' + tableSize + 'j — Hôte';
+    setOnlineStatus('Table prête (' + tableSize + ' places) — code ' + roomCode + '. Bots sur les places vides.');
     gameStarted = true;
     updateUI();
     showWaiting(true);
-    addLog('Table en ligne créée — code ' + roomCode);
+    addLog('Table en ligne créée — ' + tableSize + ' places — code ' + roomCode);
   });
 
   peer.on('connection', (conn) => {
@@ -744,6 +884,7 @@ function joinOnlineRoom() {
       hostConn.on('open', () => {
         clearJoinTimeout();
         gameMode = 'guest';
+        // Taille réelle reçue ensuite via 'joined' / 'state'
         tableSize = 4;
         players = makePlayers(4, 1000);
         buildSeatsDOM();
@@ -803,7 +944,7 @@ function handleHostMessage(conn, data) {
     addLog(players[seat].name + ' a rejoint la table (' + players[seat].chips + ' $)');
     setOnlineStatus(players[seat].name + ' a rejoint ! Tu peux lancer la main.');
     try {
-      conn.send({ type: 'joined', seatIdx: seat, players: serializePlayers() });
+      conn.send({ type: 'joined', seatIdx: seat, players: serializePlayers(), tableSize: tableSize });
     } catch (e) { console.error(e); }
     broadcastState();
     updateUI();
@@ -823,13 +964,15 @@ function handleGuestMessage(data) {
   if (!data || !data.type) return;
   if (data.type === 'joined') {
     mySeatIdx = data.seatIdx;
+    if (data.tableSize) tableSize = data.tableSize;
     if (data.players) {
       players = data.players;
-      tableSize = players.length;
+      tableSize = data.tableSize || players.length;
       buildSeatsDOM();
     }
-    setOnlineStatus('Tu es à la table (siège ' + (mySeatIdx + 1) + '). Attends le lancement.');
-    addLog('Tu as rejoint la table (siège ' + (mySeatIdx + 1) + ').');
+    document.getElementById('tableSubtitle').innerText = 'En ligne ' + tableSize + 'j — Invité';
+    setOnlineStatus('Tu es à la table (siège ' + (mySeatIdx + 1) + '/' + tableSize + '). Attends le lancement.');
+    addLog('Tu as rejoint la table (siège ' + (mySeatIdx + 1) + '/' + tableSize + ').');
     updateUI();
   } else if (data.type === 'state') {
     applyFullState(data.state);
@@ -1240,25 +1383,30 @@ function updateUI() {
   for (let i = 0; i < 5; i++) {
     comm.insertAdjacentHTML('beforeend', communityCards[i] ? renderCardElement(communityCards[i]) : renderEmptyCardSlot());
   }
-  players.forEach((p, idx) => {
-    const el = document.getElementById('player-' + idx);
+  // Rotation visuelle : le joueur local (mySeatIdx) est TOUJOURS en bas au centre (position 0)
+  // visualPos = (logicalIdx - mySeatIdx + n) % n
+  const n = players.length;
+  const seatMe = (typeof mySeatIdx === 'number' && mySeatIdx >= 0 && mySeatIdx < n) ? mySeatIdx : 0;
+  players.forEach((p, logicalIdx) => {
+    const visualPos = (logicalIdx - seatMe + n) % n;
+    const el = document.getElementById('player-' + visualPos);
     if (!el) return;
-    const isMe = idx === mySeatIdx;
-    const isActive = idx === activePlayerIdx && currentPhase !== 'SHOWDOWN' && !p.folded && !p.isAllIn;
-    const isDealer = idx === dealerIdx;
+    const isMe = logicalIdx === seatMe;
+    const isActive = logicalIdx === activePlayerIdx && currentPhase !== 'SHOWDOWN' && !p.folded && !p.isAllIn;
+    const isDealer = logicalIdx === dealerIdx;
     const faceUp = isMe || currentPhase === 'SHOWDOWN';
     const compact = tableSize >= 6;
     el.innerHTML = `
-      ${isDealer ? `<span class="absolute -top-2 -left-2 bg-amber-400 text-black font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow z-30">D</span>` : ''}
-      <div class="flex flex-col items-center bg-slate-900/90 border ${isActive ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-slate-700'} ${p.folded ? 'opacity-40' : ''} px-2 py-1 rounded-2xl shadow-xl ${compact ? 'w-20 sm:w-24' : 'w-24 sm:w-28'} relative">
-        <div class="${compact ? 'text-base sm:text-xl' : 'text-xl sm:text-2xl'}">${p.avatar}</div>
-        <span class="text-[9px] sm:text-[10px] font-bold text-slate-200 truncate w-full text-center">${isMe ? 'Vous' : p.name}</span>
-        <span class="text-[10px] sm:text-xs font-black text-amber-400">${p.chips} $</span>
-        ${p.currentBet > 0 ? `<span class="text-[8px] bg-emerald-950 text-emerald-300 font-bold px-1 py-0.5 rounded-full mt-0.5">+${p.currentBet}$</span>` : ''}
-        ${p.isAllIn && !p.folded ? `<span class="text-[8px] bg-red-900 text-red-200 font-bold px-1 rounded">ALL-IN</span>` : ''}
+      ${isDealer ? `<span class="absolute -top-1 -left-1 bg-amber-400 text-black font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center border border-white shadow z-30">D</span>` : ''}
+      <div class="flex flex-col items-center bg-slate-900/95 border ${isActive ? 'border-amber-400 ring-2 ring-amber-400/50' : isMe ? 'border-sky-400/70' : 'border-slate-700'} ${p.folded ? 'opacity-40' : ''} px-1.5 py-1 rounded-xl shadow-lg ${compact ? 'w-[4.5rem] sm:w-20' : 'w-20 sm:w-24'} relative">
+        <div class="${compact ? 'text-sm sm:text-base' : 'text-base sm:text-xl'}">${isMe ? '👤' : p.avatar}</div>
+        <span class="text-[8px] sm:text-[10px] font-bold ${isMe ? 'text-sky-300' : 'text-slate-200'} truncate w-full text-center leading-tight">${isMe ? 'Vous' : p.name}</span>
+        <span class="text-[9px] sm:text-[11px] font-black text-amber-400 leading-tight">${p.chips}$</span>
+        ${p.currentBet > 0 ? `<span class="text-[7px] bg-emerald-950 text-emerald-300 font-bold px-1 rounded-full">+${p.currentBet}$</span>` : ''}
+        ${p.isAllIn && !p.folded ? `<span class="text-[7px] bg-red-900 text-red-200 font-bold px-1 rounded">ALL-IN</span>` : ''}
       </div>
-      <div class="flex -space-x-3 sm:-space-x-4 mt-0.5">
-        ${(p.cards || []).map(c => renderCardElement(c, faceUp, compact)).join('')}
+      <div class="flex -space-x-2 sm:-space-x-3 mt-0.5">
+        ${(p.cards || []).map(c => renderCardElement(c, faceUp, true)).join('')}
       </div>`;
   });
   const me = players[mySeatIdx] || players[0];
@@ -1334,7 +1482,7 @@ function updateHandStrengthUI(me, humanEval) {
 
   if (preview) {
     preview.innerHTML = (me.cards || []).map(c => {
-      return '<div class="w-8 h-11 sm:w-9 sm:h-12 bg-white rounded border border-slate-300 flex flex-col justify-between p-0.5 shadow ' + c.color + '">' +
+      return '<div class="w-7 h-10 sm:w-9 sm:h-12 bg-white rounded border border-slate-300 flex flex-col justify-between p-0.5 shadow ' + c.color + '">' +
         '<div class="text-[9px] font-black leading-none">' + c.label + '</div>' +
         '<div class="text-center text-xs font-bold leading-none">' + c.suit + '</div>' +
         '<div class="text-[9px] font-black leading-none rotate-180">' + c.label + '</div>' +
@@ -1344,21 +1492,21 @@ function updateHandStrengthUI(me, humanEval) {
 }
 
 function renderCardElement(card, faceUp = true, compact = false) {
-  // Cartes plus grandes pour la lisibilité
-  const w = compact ? 'w-9 h-12 sm:w-11 sm:h-16' : 'w-11 h-16 sm:w-14 sm:h-20';
-  const fsRank = compact ? 'text-[10px] sm:text-xs' : 'text-xs sm:text-sm';
-  const fsSuit = compact ? 'text-sm sm:text-base' : 'text-base sm:text-xl';
+  // Mobile-first : lisible sans déborder
+  const w = compact ? 'w-7 h-10 sm:w-10 sm:h-14' : 'w-9 h-12 sm:w-12 sm:h-[4.5rem]';
+  const fsRank = compact ? 'text-[8px] sm:text-[10px]' : 'text-[10px] sm:text-xs';
+  const fsSuit = compact ? 'text-[11px] sm:text-sm' : 'text-sm sm:text-lg';
   if (!faceUp) {
-    return `<div class="poker-card ${w} bg-gradient-to-br from-blue-800 to-indigo-950 rounded-md border border-indigo-400/40 flex items-center justify-center shadow"><i class="fa-solid fa-gem text-indigo-300/40 ${compact ? 'text-sm' : 'text-base sm:text-lg'}"></i></div>`;
+    return `<div class="poker-card ${w} bg-gradient-to-br from-blue-800 to-indigo-950 rounded border border-indigo-400/40 flex items-center justify-center shadow"><i class="fa-solid fa-gem text-indigo-300/40 text-[10px] sm:text-sm"></i></div>`;
   }
-  return `<div class="poker-card ${w} bg-white rounded-md border border-slate-300 flex flex-col justify-between p-0.5 sm:p-1 shadow ${card.color}">
+  return `<div class="poker-card ${w} bg-white rounded border border-slate-300 flex flex-col justify-between p-0.5 shadow ${card.color}">
     <div class="${fsRank} font-black leading-none">${card.label}</div>
     <div class="text-center ${fsSuit} font-bold leading-none">${card.suit}</div>
     <div class="${fsRank} font-black leading-none rotate-180">${card.label}</div>
   </div>`;
 }
 function renderEmptyCardSlot() {
-  return `<div class="w-11 h-16 sm:w-14 sm:h-20 rounded-md border-2 border-dashed border-emerald-500/20 bg-black/20"></div>`;
+  return `<div class="w-9 h-12 sm:w-12 sm:h-[4.5rem] rounded border-2 border-dashed border-emerald-500/20 bg-black/20"></div>`;
 }
 
 function rebuyChips() {
@@ -1376,6 +1524,13 @@ document.querySelectorAll('.diff-option').forEach(btn => {
 });
 document.querySelectorAll('.table-option').forEach(btn => {
   btn.addEventListener('click', () => selectTable(btn.dataset.table));
+});
+document.querySelectorAll('.online-table-option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.online-table-option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    tableSize = parseInt(btn.dataset.onlineTable, 10) || 4;
+  });
 });
 document.getElementById('btnStartSolo').addEventListener('click', startSoloFromMenu);
 document.getElementById('btnStartOnlineFromMenu').addEventListener('click', () => {
