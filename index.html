@@ -1061,6 +1061,28 @@ function handleGuestMessage(data) {
     updateUI();
   } else if (data.type === 'state') {
     applyFullState(data.state);
+  } else if (data.type === 'winner') {
+    // Modal gagnant côté invité
+    if (data.payload) {
+      const p = data.payload;
+      const names = (p.winnerIds || []).map(id => id === mySeatIdx ? 'Vous' : (p.winnerNamesById && p.winnerNamesById[id]) || 'Joueur');
+      // fallback names
+      const displayNames = (p.names || names).map((n, i) => {
+        const id = (p.winnerIds || [])[i];
+        return id === mySeatIdx ? 'Vous' : n;
+      });
+      document.getElementById('actionButtons').classList.add('hidden');
+      document.getElementById('raiseControls').classList.add('hidden');
+      showWaiting(false);
+      showWinnerModal({
+        names: displayNames.length ? displayNames : (p.names || ['Gagnant']),
+        handName: p.handName || '—',
+        amount: p.amount || 0,
+        cards: p.cards || [],
+        isFoldWin: !!p.isFoldWin
+      });
+      addLog('🏆 ' + (displayNames.join(', ') || 'Gagnant') + ' — ' + (p.handName || '') + ' (' + (p.amount || 0) + ' $)');
+    }
   } else if (data.type === 'error') {
     setOnlineStatus(data.message || 'Erreur', true);
     openOnlineModal();
@@ -1103,6 +1125,16 @@ function broadcastState() {
   };
   Object.values(connections).forEach(conn => {
     try { if (conn && conn.open) conn.send({ type: 'state', state }); } catch (e) {}
+  });
+}
+
+/** Envoie le résultat de main à tous les invités (modal gagnant) */
+function broadcastWinner(payload) {
+  if (gameMode !== 'host') return;
+  Object.values(connections).forEach(conn => {
+    try {
+      if (conn && conn.open) conn.send({ type: 'winner', payload });
+    } catch (e) {}
   });
 }
 function applyFullState(state) {
@@ -1459,8 +1491,18 @@ function resolveShowdown() {
   updateUI(); broadcastState();
   document.getElementById('actionButtons').classList.add('hidden');
   document.getElementById('raiseControls').classList.add('hidden');
-  showWinnerModal({
+  const modalPayload = {
     names: winners.map(w => w.id === mySeatIdx ? 'Vous' : w.name),
+    handName: winners[0].finalHandName,
+    amount: potWon,
+    cards: winners[0].cards,
+    isFoldWin: false
+  };
+  showWinnerModal(modalPayload);
+  broadcastWinner({
+    names: winners.map(w => w.name),
+    winnerIds: winners.map(w => w.id),
+    winnerNamesById: Object.fromEntries(winners.map(w => [w.id, w.name])),
     handName: winners[0].finalHandName,
     amount: potWon,
     cards: winners[0].cards,
@@ -1476,8 +1518,18 @@ function endHand(winner) {
   updateUI(); broadcastState();
   document.getElementById('actionButtons').classList.add('hidden');
   document.getElementById('raiseControls').classList.add('hidden');
-  showWinnerModal({
+  const modalPayload = {
     names: [winner.id === mySeatIdx ? 'Vous' : winner.name],
+    handName: 'Victoire par abandon',
+    amount: potWon,
+    cards: winner.cards,
+    isFoldWin: true
+  };
+  showWinnerModal(modalPayload);
+  broadcastWinner({
+    names: [winner.name],
+    winnerIds: [winner.id],
+    winnerNamesById: { [winner.id]: winner.name },
     handName: 'Victoire par abandon',
     amount: potWon,
     cards: winner.cards,
