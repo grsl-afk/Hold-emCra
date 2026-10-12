@@ -109,17 +109,31 @@
     #centerZone {
       z-index: 30;
       pointer-events: none;
-      max-width: 92%;
+      max-width: 78%;
+      padding: 0.35rem 0.5rem !important;
+      gap: 0.25rem !important;
+    }
+    @media (min-width: 640px) {
+      #centerZone { max-width: 70%; padding: 0.5rem 0.75rem !important; }
     }
     #communityCards {
-      min-height: 3.25rem;
+      min-height: 2.6rem;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-wrap: nowrap;
+      gap: 0.25rem;
     }
     @media (min-width: 640px) {
-      #communityCards { min-height: 4.5rem; }
+      #communityCards { min-height: 3.4rem; gap: 0.35rem; }
+    }
+    @keyframes boardDeal {
+      0% { opacity: 0; transform: translateY(-18px) scale(0.55) rotate(-12deg); }
+      70% { opacity: 1; transform: translateY(2px) scale(1.05) rotate(2deg); }
+      100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+    }
+    .board-deal {
+      animation: boardDeal 0.4s cubic-bezier(0.22, 1.2, 0.36, 1) both;
     }
 
     /* Header compact mobile */
@@ -201,10 +215,13 @@
         </div>
       </div>
 
-      <div class="bg-slate-800/60 rounded-xl p-3 text-xs text-slate-300 flex items-center justify-between">
+      <div class="bg-slate-800/60 rounded-xl p-3 text-xs text-slate-300 flex items-center justify-between gap-2">
         <span><i class="fa-solid fa-wallet text-amber-400 mr-1"></i> Ta cagnotte</span>
         <span id="menuBankroll" class="font-black text-amber-300">1000 $</span>
       </div>
+      <button type="button" id="btnResetBankroll" class="hidden w-full bg-rose-800/90 hover:bg-rose-700 text-rose-100 font-bold py-2.5 rounded-xl text-sm border border-rose-500/40 transition">
+        <i class="fa-solid fa-rotate-left mr-2"></i> Remettre à 1 000 $
+      </button>
 
       <button type="button" id="btnStartSolo" class="w-full bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black py-3.5 rounded-xl text-base transition shadow-lg active:scale-95">
         <i class="fa-solid fa-play mr-2"></i> Jouer en solo
@@ -276,7 +293,7 @@
       <div class="poker-table-inner" id="tableInner">
         <div id="seatsContainer"></div>
         <!-- Zone centrale (cartes communes) au-dessus des sièges -->
-        <div id="centerZone" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-2xl bg-black/35 border border-emerald-500/20 backdrop-blur-sm shadow-xl">
+        <div id="centerZone" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center rounded-xl bg-black/40 border border-emerald-500/15 backdrop-blur-sm shadow-lg">
           <div class="flex items-center gap-2 pointer-events-auto">
             <span id="phaseBadge" class="bg-black/70 border border-amber-500/40 text-amber-300 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow">Pré-Flop</span>
             <span id="roomCodeBadge" class="hidden bg-indigo-900/80 border border-indigo-400/40 text-indigo-200 text-[10px] sm:text-xs font-bold px-3 py-1 rounded-full tracking-widest"></span>
@@ -407,7 +424,16 @@
             <div class="text-[9px] text-slate-400">joueurs</div>
           </button>
         </div>
-        <p class="text-[10px] text-slate-500 mt-1.5">Les places vides seront comblées par des bots.</p>
+        <p id="onlineBotsHint" class="text-[10px] text-slate-500 mt-1.5">Les places vides seront comblées par des bots.</p>
+      </div>
+      <div class="flex items-center justify-between gap-3 bg-slate-800/60 rounded-xl p-3 border border-slate-700">
+        <div class="text-left">
+          <p class="text-xs font-bold text-slate-200">Bots sur places vides</p>
+          <p class="text-[10px] text-slate-500">Désactive pour jouer uniquement entre humains</p>
+        </div>
+        <button type="button" id="btnToggleOnlineBots" class="shrink-0 px-3 py-2 rounded-lg text-xs font-black bg-emerald-700 text-white border border-emerald-400/40">
+          OUI
+        </button>
       </div>
       <button type="button" onclick="createOnlineRoom()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-xl transition flex items-center justify-center gap-2">
         <i class="fa-solid fa-plus"></i> Créer une table
@@ -481,6 +507,7 @@ let tableSize = 4;
 let aiDifficulty = 'easy'; // easy | medium | hard
 let players = [];
 let deck = [], communityCards = [], pot = 0, currentHighBet = 0, lastRaiseSize = 0;
+let lastBoardCount = 0; // pour l'anim d'apparition carte par carte
 let dealerIdx = 0, activePlayerIdx = 0, currentPhase = 'PREFLOP';
 let smallBlind = 5, bigBlind = 10;
 let gameLogs = [], handNumber = 0, totalHandsPlayed = 0, startingBankroll = 1000;
@@ -488,25 +515,50 @@ let isProcessing = false;
 let gameStarted = false;
 
 let gameMode = 'solo', mySeatIdx = 0, roomCode = null;
+let onlineFillBots = true; // multi : remplir les sièges vides avec des bots
 let peer = null, connections = {}, hostConn = null, myPeerId = null, onlineDisplayName = 'Joueur';
 
-function makePlayers(n, humanChips) {
+function makePlayers(n, humanChips, fillBots = true) {
   const list = [];
   for (let i = 0; i < n; i++) {
     if (i === 0) {
       list.push({
-        id: 0, name: 'Vous', isHuman: true, isBot: false, avatar: '👤',
+        id: 0, name: 'Vous', isHuman: true, isBot: false, empty: false, avatar: '👤',
         chips: humanChips, currentBet: 0, cards: [], folded: false, isAllIn: false, hasActed: false, peerId: null, connected: true
       });
-    } else {
+    } else if (fillBots) {
       const bot = BOT_POOL[(i - 1) % BOT_POOL.length];
       list.push({
-        id: i, name: bot.name, isHuman: false, isBot: true, avatar: bot.avatar,
+        id: i, name: bot.name, isHuman: false, isBot: true, empty: false, avatar: bot.avatar,
         chips: 1000, currentBet: 0, cards: [], folded: false, isAllIn: false, hasActed: false, peerId: null, connected: true
+      });
+    } else {
+      list.push({
+        id: i, name: 'Vide', isHuman: false, isBot: false, empty: true, avatar: '🪑',
+        chips: 0, currentBet: 0, cards: [], folded: true, isAllIn: false, hasActed: true, peerId: null, connected: false
       });
     }
   }
   return list;
+}
+
+function toggleOnlineBots() {
+  onlineFillBots = !onlineFillBots;
+  const btn = document.getElementById('btnToggleOnlineBots');
+  const hint = document.getElementById('onlineBotsHint');
+  if (btn) {
+    btn.textContent = onlineFillBots ? 'OUI' : 'NON';
+    btn.className = 'shrink-0 px-3 py-2 rounded-lg text-xs font-black border ' + (
+      onlineFillBots
+        ? 'bg-emerald-700 text-white border-emerald-400/40'
+        : 'bg-slate-700 text-slate-300 border-slate-500/40'
+    );
+  }
+  if (hint) {
+    hint.textContent = onlineFillBots
+      ? 'Les places vides seront comblées par des bots.'
+      : 'Uniquement des humains — places vides libres.';
+  }
 }
 
 function buildSeatsDOM() {
@@ -665,11 +717,42 @@ function startSoloFromMenu() {
   if (players[0].chips <= 0) document.getElementById('rebuyModal').classList.remove('hidden');
   else startNewHand();
 }
+function refreshMenuBankroll() {
+  const bal = loadBankroll();
+  const el = document.getElementById('menuBankroll');
+  const btn = document.getElementById('btnResetBankroll');
+  if (el) {
+    el.innerText = bal + ' $';
+    el.className = 'font-black ' + (bal < 1000 ? 'text-rose-400' : 'text-amber-300');
+  }
+  if (btn) {
+    if (bal < 1000) btn.classList.remove('hidden');
+    else btn.classList.add('hidden');
+  }
+}
+
+function resetBankrollTo1000() {
+  startingBankroll = 1000;
+  totalHandsPlayed = totalHandsPlayed || 0;
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      bankroll: 1000,
+      startingBankroll: 1000,
+      totalHandsPlayed,
+      savedAt: Date.now()
+    }));
+  } catch (e) {}
+  if (players[0]) players[0].chips = 1000;
+  if (typeof mySeatIdx === 'number' && players[mySeatIdx]) players[mySeatIdx].chips = 1000;
+  refreshMenuBankroll();
+  addLog('Cagnotte remise à 1 000 $.');
+}
+
 function backToMenu() {
   if (gameMode !== 'solo') leaveOnline(true);
   gameStarted = false;
   document.getElementById('startMenu').classList.remove('hidden');
-  document.getElementById('menuBankroll').innerText = loadBankroll() + ' $';
+  refreshMenuBankroll();
   document.getElementById('winnerModal').classList.add('hidden');
   document.getElementById('nextHandContainer').classList.add('hidden');
   document.getElementById('actionButtons').classList.add('hidden');
@@ -796,22 +879,25 @@ function createOnlineRoom() {
     gameMode = 'host';
     mySeatIdx = 0;
     const bankroll = loadBankroll();
-    players = makePlayers(tableSize, bankroll > 0 ? bankroll : 1000);
+    players = makePlayers(tableSize, bankroll > 0 ? bankroll : 1000, onlineFillBots);
     players[0].name = name;
     players[0].peerId = id;
-    // Sièges 1..n restent bots jusqu'à ce que des amis rejoignent
     buildSeatsDOM();
     document.getElementById('startMenu').classList.add('hidden');
     document.getElementById('hostRoomCode').innerText = roomCode;
     document.getElementById('hostRoomInfo').classList.remove('hidden');
     document.getElementById('roomCodeBadge').classList.remove('hidden');
     document.getElementById('roomCodeBadge').innerText = 'CODE ' + roomCode;
-    document.getElementById('tableSubtitle').innerText = 'En ligne ' + tableSize + 'j — Hôte';
-    setOnlineStatus('Table prête (' + tableSize + ' places) — code ' + roomCode + '. Bots sur les places vides.');
+    document.getElementById('tableSubtitle').innerText = 'En ligne ' + tableSize + 'j — Hôte' + (onlineFillBots ? ' + bots' : '');
+    setOnlineStatus(
+      onlineFillBots
+        ? ('Table prête (' + tableSize + ' places) — code ' + roomCode + '. Bots sur places vides.')
+        : ('Table prête (' + tableSize + ' places) — code ' + roomCode + '. Sans bots (humains only).')
+    );
     gameStarted = true;
     updateUI();
     showWaiting(true);
-    addLog('Table en ligne créée — ' + tableSize + ' places — code ' + roomCode);
+    addLog('Table en ligne — ' + tableSize + ' places — bots: ' + (onlineFillBots ? 'oui' : 'non') + ' — code ' + roomCode);
   });
 
   peer.on('connection', (conn) => {
@@ -929,7 +1015,7 @@ function joinOnlineRoom() {
 function handleHostMessage(conn, data) {
   if (!data || !data.type) return;
   if (data.type === 'join') {
-    let seat = players.findIndex((p, i) => i > 0 && p.isBot && !p.peerId);
+    let seat = players.findIndex((p, i) => i > 0 && !p.peerId && (p.isBot || p.empty));
     if (seat === -1) {
       try { conn.send({ type: 'error', message: 'Table pleine (4 joueurs max)' }); } catch (e) {}
       return;
@@ -938,6 +1024,8 @@ function handleHostMessage(conn, data) {
     players[seat].chips = Math.max(0, data.chips || 1000);
     players[seat].isHuman = true;
     players[seat].isBot = false;
+    players[seat].empty = false;
+    players[seat].folded = false;
     players[seat].peerId = data.peerId || conn.peer;
     players[seat].avatar = '👤';
     players[seat].connected = true;
@@ -963,16 +1051,18 @@ function handleHostMessage(conn, data) {
 function handleGuestMessage(data) {
   if (!data || !data.type) return;
   if (data.type === 'joined') {
-    mySeatIdx = data.seatIdx;
     if (data.tableSize) tableSize = data.tableSize;
     if (data.players) {
       players = data.players;
       tableSize = data.tableSize || players.length;
       buildSeatsDOM();
     }
+    // Siège local : priorité peerId, sinon seatIdx fourni par l'hôte
+    if (typeof data.seatIdx === 'number') mySeatIdx = data.seatIdx;
+    mySeatIdx = resolveMySeat();
     document.getElementById('tableSubtitle').innerText = 'En ligne ' + tableSize + 'j — Invité';
-    setOnlineStatus('Tu es à la table (siège ' + (mySeatIdx + 1) + '/' + tableSize + '). Attends le lancement.');
-    addLog('Tu as rejoint la table (siège ' + (mySeatIdx + 1) + '/' + tableSize + ').');
+    setOnlineStatus('Tu es en bas de table (siège ' + (mySeatIdx + 1) + '/' + tableSize + ').');
+    addLog('Tu as rejoint — position bas de table (siège logique ' + (mySeatIdx + 1) + ').');
     updateUI();
   } else if (data.type === 'state') {
     applyFullState(data.state);
@@ -988,11 +1078,18 @@ function handlePeerDisconnect(peerId) {
   delete connections[peerId];
   const p = players.find(pl => pl.peerId === peerId);
   if (p) {
-    addLog(p.name + ' s\'est déconnecté — siège repris par un bot.');
-    p.isHuman = false; p.isBot = true; p.peerId = null;
-    const bot = BOT_POOL[(p.id - 1) % BOT_POOL.length];
-    p.name = bot.name; p.avatar = bot.avatar;
-    if (p.chips <= 0) p.chips = 1000;
+    p.peerId = null;
+    if (onlineFillBots) {
+      addLog(p.name + ' s\'est déconnecté — siège repris par un bot.');
+      p.isHuman = false; p.isBot = true; p.empty = false; p.connected = true;
+      const bot = BOT_POOL[(p.id - 1) % BOT_POOL.length];
+      p.name = bot.name; p.avatar = bot.avatar;
+      if (p.chips <= 0) p.chips = 1000;
+    } else {
+      addLog(p.name + ' s\'est déconnecté — place libre.');
+      p.isHuman = false; p.isBot = false; p.empty = true; p.connected = false;
+      p.name = 'Vide'; p.avatar = '🪑'; p.chips = 0; p.folded = true; p.cards = [];
+    }
     broadcastState(); updateUI();
   }
 }
@@ -1007,7 +1104,7 @@ function broadcastState() {
   if (gameMode !== 'host') return;
   const state = {
     players: serializePlayers(), communityCards: [...communityCards], pot, currentHighBet, lastRaiseSize,
-    dealerIdx, activePlayerIdx, currentPhase, handNumber, tableSize
+    dealerIdx, activePlayerIdx, currentPhase, handNumber, tableSize, onlineFillBots
   };
   Object.values(connections).forEach(conn => {
     try { if (conn && conn.open) conn.send({ type: 'state', state }); } catch (e) {}
@@ -1021,6 +1118,7 @@ function applyFullState(state) {
       tableSize = players.length;
       buildSeatsDOM();
     } else applyPlayersSnapshot(state.players);
+    resolveMySeat();
   }
   communityCards = state.communityCards || [];
   pot = state.pot || 0; currentHighBet = state.currentHighBet || 0;
@@ -1068,17 +1166,42 @@ function startNewHand() {
   if (gameMode === 'host') {
     for (let i = 1; i < players.length; i++) {
       if (!players[i].peerId) {
-        players[i].isBot = true; players[i].isHuman = false;
-        if (players[i].chips <= 0) players[i].chips = 1000;
-        const bot = BOT_POOL[(i - 1) % BOT_POOL.length];
-        players[i].name = bot.name; players[i].avatar = bot.avatar;
+        if (onlineFillBots) {
+          players[i].isBot = true;
+          players[i].isHuman = false;
+          players[i].empty = false;
+          players[i].connected = true;
+          if (players[i].chips <= 0) players[i].chips = 1000;
+          const bot = BOT_POOL[(i - 1) % BOT_POOL.length];
+          players[i].name = bot.name;
+          players[i].avatar = bot.avatar;
+        } else {
+          players[i].isBot = false;
+          players[i].isHuman = false;
+          players[i].empty = true;
+          players[i].connected = false;
+          players[i].chips = 0;
+          players[i].name = 'Vide';
+          players[i].avatar = '🪑';
+          players[i].folded = true;
+          players[i].cards = [];
+        }
       }
     }
   }
-  if (players.filter(p => p.chips > 0).length < 2) { addLog('Pas assez de joueurs.'); return; }
+  const playable = players.filter(p => p.chips > 0 && !p.empty);
+  if (playable.length < 2) {
+    addLog(onlineFillBots ? 'Pas assez de joueurs.' : 'Pas assez de joueurs humains (min. 2). Attends des amis.');
+    if (gameMode === 'host') {
+      showWaiting(true);
+      setOnlineStatus('Il faut au moins 2 joueurs pour lancer' + (onlineFillBots ? '.' : ' (bots désactivés).'));
+    }
+    return;
+  }
 
   handNumber++; createDeck(); communityCards = []; pot = 0;
   currentHighBet = 0; lastRaiseSize = bigBlind; currentPhase = 'PREFLOP'; isProcessing = false;
+  lastBoardCount = 0;
 
   players.forEach(p => {
     p.cards = []; p.folded = p.chips <= 0; p.isAllIn = false; p.currentBet = 0; p.hasActed = false; p.finalHandName = null;
@@ -1367,8 +1490,35 @@ function endHand(winner) {
   });
 }
 
+/** Trouve le siège local (peerId en ligne, sinon mySeatIdx, sinon 0) */
+function resolveMySeat() {
+  const n = players.length;
+  if (!n) return 0;
+  if (myPeerId) {
+    const byPeer = players.findIndex(p => p && p.peerId === myPeerId);
+    if (byPeer >= 0) {
+      mySeatIdx = byPeer;
+      return byPeer;
+    }
+  }
+  if (typeof mySeatIdx === 'number' && mySeatIdx >= 0 && mySeatIdx < n) return mySeatIdx;
+  if (gameMode === 'solo') {
+    mySeatIdx = 0;
+    return 0;
+  }
+  return 0;
+}
+
 function updateUI() {
   if (!players.length) return;
+
+  // S'assurer que le DOM a le bon nombre de sièges
+  const seatsContainer = document.getElementById('seatsContainer');
+  if (seatsContainer && seatsContainer.children.length !== players.length) {
+    tableSize = players.length;
+    buildSeatsDOM();
+  }
+
   document.getElementById('potTotalDisplay').innerText = `${pot} $`;
   document.getElementById('centerPotText').innerText = `Pot : ${pot} $`;
   document.getElementById('phaseBadge').innerText = PHASE_LABELS[currentPhase] || currentPhase;
@@ -1378,38 +1528,48 @@ function updateUI() {
     profitEl.innerText = `${profit >= 0 ? '+' : ''}${profit} $`;
     profitEl.className = `text-xs sm:text-sm font-black ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
   }
-  const comm = document.getElementById('communityCards');
-  comm.innerHTML = '';
-  for (let i = 0; i < 5; i++) {
-    comm.insertAdjacentHTML('beforeend', communityCards[i] ? renderCardElement(communityCards[i]) : renderEmptyCardSlot());
-  }
-  // Rotation visuelle : le joueur local (mySeatIdx) est TOUJOURS en bas au centre (position 0)
-  // visualPos = (logicalIdx - mySeatIdx + n) % n
+  renderCommunityBoard();
+
+  // TOUJOURS : joueur local en bas au centre (visual 0)
   const n = players.length;
-  const seatMe = (typeof mySeatIdx === 'number' && mySeatIdx >= 0 && mySeatIdx < n) ? mySeatIdx : 0;
-  players.forEach((p, logicalIdx) => {
+  const seatMe = resolveMySeat();
+  mySeatIdx = seatMe;
+
+  // Vider les sièges d'abord
+  for (let v = 0; v < n; v++) {
+    const el = document.getElementById('player-' + v);
+    if (el) el.innerHTML = '';
+  }
+
+  for (let logicalIdx = 0; logicalIdx < n; logicalIdx++) {
+    const p = players[logicalIdx];
+    if (!p) continue;
+    // Rotation : mon siège logique → position visuelle 0 (bas)
     const visualPos = (logicalIdx - seatMe + n) % n;
     const el = document.getElementById('player-' + visualPos);
-    if (!el) return;
+    if (!el) continue;
+
     const isMe = logicalIdx === seatMe;
     const isActive = logicalIdx === activePlayerIdx && currentPhase !== 'SHOWDOWN' && !p.folded && !p.isAllIn;
     const isDealer = logicalIdx === dealerIdx;
     const faceUp = isMe || currentPhase === 'SHOWDOWN';
-    const compact = tableSize >= 6;
+    // Cartes du joueur local plus grandes ; adversaires compactes
+    const cardCompact = !isMe;
+
     el.innerHTML = `
       ${isDealer ? `<span class="absolute -top-1 -left-1 bg-amber-400 text-black font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center border border-white shadow z-30">D</span>` : ''}
-      <div class="flex flex-col items-center bg-slate-900/95 border ${isActive ? 'border-amber-400 ring-2 ring-amber-400/50' : isMe ? 'border-sky-400/70' : 'border-slate-700'} ${p.folded ? 'opacity-40' : ''} px-1.5 py-1 rounded-xl shadow-lg ${compact ? 'w-[4.5rem] sm:w-20' : 'w-20 sm:w-24'} relative">
-        <div class="${compact ? 'text-sm sm:text-base' : 'text-base sm:text-xl'}">${isMe ? '👤' : p.avatar}</div>
-        <span class="text-[8px] sm:text-[10px] font-bold ${isMe ? 'text-sky-300' : 'text-slate-200'} truncate w-full text-center leading-tight">${isMe ? 'Vous' : p.name}</span>
+      <div class="flex flex-col items-center bg-slate-900/95 border ${isActive ? 'border-amber-400 ring-2 ring-amber-400/50' : isMe ? 'border-sky-400 ring-2 ring-sky-400/40' : 'border-slate-700'} ${p.folded ? 'opacity-40' : ''} px-1.5 py-1 rounded-xl shadow-lg ${isMe ? 'w-[5.5rem] sm:w-28' : (n >= 6 ? 'w-[4.5rem] sm:w-20' : 'w-20 sm:w-24')} relative">
+        <div class="${isMe ? 'text-lg sm:text-2xl' : 'text-sm sm:text-xl'}">${isMe ? '👤' : p.avatar}</div>
+        <span class="text-[8px] sm:text-[10px] font-bold ${isMe ? 'text-sky-300' : (p.empty ? 'text-slate-500' : 'text-slate-200')} truncate w-full text-center leading-tight">${isMe ? 'Vous' : (p.empty ? 'Libre' : p.name)}</span>
         <span class="text-[9px] sm:text-[11px] font-black text-amber-400 leading-tight">${p.chips}$</span>
         ${p.currentBet > 0 ? `<span class="text-[7px] bg-emerald-950 text-emerald-300 font-bold px-1 rounded-full">+${p.currentBet}$</span>` : ''}
         ${p.isAllIn && !p.folded ? `<span class="text-[7px] bg-red-900 text-red-200 font-bold px-1 rounded">ALL-IN</span>` : ''}
       </div>
-      <div class="flex -space-x-2 sm:-space-x-3 mt-0.5">
-        ${(p.cards || []).map(c => renderCardElement(c, faceUp, true)).join('')}
+      <div class="flex ${isMe ? '-space-x-1 sm:-space-x-2' : '-space-x-2 sm:-space-x-3'} mt-0.5">
+        ${(p.cards || []).map(c => renderCardElement(c, faceUp, cardCompact)).join('')}
       </div>`;
-  });
-  const me = players[mySeatIdx] || players[0];
+  }
+  const me = players[seatMe] || players[0];
   if (me) {
     const allCards = [...(me.cards || []), ...communityCards];
     const humanEval = evaluateHand(allCards);
@@ -1482,31 +1642,68 @@ function updateHandStrengthUI(me, humanEval) {
 
   if (preview) {
     preview.innerHTML = (me.cards || []).map(c => {
-      return '<div class="w-7 h-10 sm:w-9 sm:h-12 bg-white rounded border border-slate-300 flex flex-col justify-between p-0.5 shadow ' + c.color + '">' +
-        '<div class="text-[9px] font-black leading-none">' + c.label + '</div>' +
-        '<div class="text-center text-xs font-bold leading-none">' + c.suit + '</div>' +
-        '<div class="text-[9px] font-black leading-none rotate-180">' + c.label + '</div>' +
+      return '<div class="w-10 h-14 sm:w-11 sm:h-16 bg-white rounded-md border-2 border-slate-300 flex flex-col justify-between p-0.5 sm:p-1 shadow-md ' + c.color + '">' +
+        '<div class="text-[10px] sm:text-xs font-black leading-none">' + c.label + '</div>' +
+        '<div class="text-center text-sm sm:text-base font-bold leading-none">' + c.suit + '</div>' +
+        '<div class="text-[10px] sm:text-xs font-black leading-none rotate-180">' + c.label + '</div>' +
       '</div>';
     }).join('');
   }
 }
 
-function renderCardElement(card, faceUp = true, compact = false) {
-  // Mobile-first : lisible sans déborder
-  const w = compact ? 'w-7 h-10 sm:w-10 sm:h-14' : 'w-9 h-12 sm:w-12 sm:h-[4.5rem]';
-  const fsRank = compact ? 'text-[8px] sm:text-[10px]' : 'text-[10px] sm:text-xs';
-  const fsSuit = compact ? 'text-[11px] sm:text-sm' : 'text-sm sm:text-lg';
-  if (!faceUp) {
-    return `<div class="poker-card ${w} bg-gradient-to-br from-blue-800 to-indigo-950 rounded border border-indigo-400/40 flex items-center justify-center shadow"><i class="fa-solid fa-gem text-indigo-300/40 text-[10px] sm:text-sm"></i></div>`;
+function renderCardElement(card, faceUp = true, compact = false, extraClass = '') {
+  // compact=true adversaires | compact='board' cartes communes (petites) | false = tes cartes
+  let w, fsRank, fsSuit;
+  if (compact === 'board') {
+    w = 'w-8 h-11 sm:w-10 sm:h-14';
+    fsRank = 'text-[9px] sm:text-[11px]';
+    fsSuit = 'text-sm sm:text-base';
+  } else if (compact) {
+    w = 'w-7 h-10 sm:w-9 sm:h-12';
+    fsRank = 'text-[8px] sm:text-[10px]';
+    fsSuit = 'text-[11px] sm:text-sm';
+  } else {
+    w = 'w-12 h-[4.25rem] sm:w-14 sm:h-20';
+    fsRank = 'text-xs sm:text-sm';
+    fsSuit = 'text-lg sm:text-2xl';
   }
-  return `<div class="poker-card ${w} bg-white rounded border border-slate-300 flex flex-col justify-between p-0.5 shadow ${card.color}">
+  const cls = (extraClass ? extraClass + ' ' : '') + 'poker-card ' + w;
+  if (!faceUp) {
+    return `<div class="${cls} bg-gradient-to-br from-blue-800 to-indigo-950 rounded-md border border-indigo-400/40 flex items-center justify-center shadow"><i class="fa-solid fa-gem text-indigo-300/40 text-[10px] sm:text-sm"></i></div>`;
+  }
+  return `<div class="${cls} bg-white rounded-md border border-slate-300 flex flex-col justify-between p-0.5 shadow-md ${card.color}">
     <div class="${fsRank} font-black leading-none">${card.label}</div>
     <div class="text-center ${fsSuit} font-bold leading-none">${card.suit}</div>
     <div class="${fsRank} font-black leading-none rotate-180">${card.label}</div>
   </div>`;
 }
 function renderEmptyCardSlot() {
-  return `<div class="w-9 h-12 sm:w-12 sm:h-[4.5rem] rounded border-2 border-dashed border-emerald-500/20 bg-black/20"></div>`;
+  return `<div class="w-8 h-11 sm:w-10 sm:h-14 rounded-md border border-dashed border-emerald-500/25 bg-black/20"></div>`;
+}
+
+/** Affiche le board avec révélation carte par carte */
+function renderCommunityBoard() {
+  const comm = document.getElementById('communityCards');
+  if (!comm) return;
+  const prev = lastBoardCount;
+  const next = communityCards.length;
+  const shouldAnimate = next > prev && next > 0;
+
+  comm.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    if (communityCards[i]) {
+      if (shouldAnimate && i >= prev) {
+        const delay = ((i - prev) * 0.18).toFixed(2);
+        const html = renderCardElement(communityCards[i], true, 'board', 'board-deal');
+        comm.insertAdjacentHTML('beforeend', html.replace('class="', `style="animation-delay:${delay}s" class="`));
+      } else {
+        comm.insertAdjacentHTML('beforeend', renderCardElement(communityCards[i], true, 'board'));
+      }
+    } else {
+      comm.insertAdjacentHTML('beforeend', renderEmptyCardSlot());
+    }
+  }
+  lastBoardCount = next;
 }
 
 function rebuyChips() {
@@ -1542,7 +1739,10 @@ document.getElementById('btnOnline').addEventListener('click', (e) => {
   openOnlineModal();
 });
 
-document.getElementById('menuBankroll').innerText = loadBankroll() + ' $';
+document.getElementById('btnResetBankroll').addEventListener('click', resetBankrollTo1000);
+const btnBots = document.getElementById('btnToggleOnlineBots');
+if (btnBots) btnBots.addEventListener('click', toggleOnlineBots);
+refreshMenuBankroll();
 document.getElementById('actionButtons').classList.add('hidden');
 </script>
 </body>
