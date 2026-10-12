@@ -560,6 +560,23 @@ function closeWinnerModal() {
 }
 
 // ========== ONLINE (simplifié, 4 max) ==========
+const PEER_OPTS = {
+  host: '0.peerjs.com',
+  port: 443,
+  path: '/',
+  secure: true,
+  debug: 2,
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ]
+  }
+};
+
+let joinTimeoutId = null;
+
 function openOnlineModal() {
   try {
     document.getElementById('onlineBankrollPreview').innerText = loadBankroll() + ' $';
@@ -572,8 +589,9 @@ function openOnlineModal() {
 function closeOnlineModal() { document.getElementById('onlineModal').classList.add('hidden'); }
 function setOnlineStatus(msg, isError) {
   const el = document.getElementById('onlineStatus');
+  if (!el) return;
   el.innerText = msg;
-  el.className = `text-xs text-center min-h-[1.25rem] ${isError ? 'text-rose-400' : 'text-emerald-400'}`;
+  el.className = 'text-xs text-center min-h-[1.25rem] ' + (isError ? 'text-rose-400' : 'text-emerald-400');
 }
 function genRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -584,20 +602,64 @@ function genRoomCode() {
 function copyRoomCode() {
   if (roomCode) navigator.clipboard.writeText(roomCode).then(() => setOnlineStatus('Code copié !')).catch(() => {});
 }
+
+function clearJoinTimeout() {
+  if (joinTimeoutId) { clearTimeout(joinTimeoutId); joinTimeoutId = null; }
+}
+
+function destroyPeer() {
+  clearJoinTimeout();
+  try { if (hostConn) hostConn.close(); } catch (e) {}
+  try { Object.values(connections).forEach(c => { try { c.close(); } catch (e) {} }); } catch (e) {}
+  try { if (peer) peer.destroy(); } catch (e) {}
+  peer = null; hostConn = null; connections = {};
+}
+
+function setupHostConnection(conn) {
+  connections[conn.peer] = conn;
+  const onReady = () => {
+    connections[conn.peer] = conn;
+    setOnlineStatus('Joueur en cours de connexion...');
+    addLog('Connexion entrante reçue');
+  };
+  if (conn.open) onReady();
+  else conn.on('open', onReady);
+
+  conn.on('data', (data) => handleHostMessage(conn, data));
+  conn.on('close', () => handlePeerDisconnect(conn.peer));
+  conn.on('error', (err) => {
+    console.error('Host conn error', err);
+    setOnlineStatus('Erreur lien joueur: ' + (err.type || err), true);
+  });
+}
+
 function createOnlineRoom() {
-  if (typeof Peer === 'undefined') { setOnlineStatus('PeerJS non chargé. Recharge la page.', true); return; }
-  tableSize = 4; // online fixe à 4
+  if (typeof Peer === 'undefined') {
+    setOnlineStatus('PeerJS non chargé. Vérifie ta connexion internet et recharge la page.', true);
+    return;
+  }
+  tableSize = 4;
   const name = (document.getElementById('onlineNameInput').value || 'Hôte').trim().slice(0, 12);
   localStorage.setItem('poker_name', name);
   roomCode = genRoomCode();
-  setOnlineStatus('Connexion...');
-  if (peer) try { peer.destroy(); } catch (e) {}
-  peer = new Peer('poker-' + roomCode, { debug: 1, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
+  setOnlineStatus('Création de la table...');
+  destroyPeer();
+
+  try {
+    peer = new Peer('poker-' + roomCode, PEER_OPTS);
+  } catch (e) {
+    setOnlineStatus('Impossible de créer le réseau: ' + e.message, true);
+    return;
+  }
+
   peer.on('open', (id) => {
-    myPeerId = id; gameMode = 'host'; mySeatIdx = 0;
+    myPeerId = id;
+    gameMode = 'host';
+    mySeatIdx = 0;
     const bankroll = loadBankroll();
     players = makePlayers(4, bankroll > 0 ? bankroll : 1000);
-    players[0].name = name; players[0].peerId = id;
+    players[0].name = name;
+    players[0].peerId = id;
     buildSeatsDOM();
     document.getElementById('startMenu').classList.add('hidden');
     document.getElementById('hostRoomCode').innerText = roomCode;
@@ -605,87 +667,185 @@ function createOnlineRoom() {
     document.getElementById('roomCodeBadge').classList.remove('hidden');
     document.getElementById('roomCodeBadge').innerText = 'CODE ' + roomCode;
     document.getElementById('tableSubtitle').innerText = 'En ligne — Hôte';
-    setOnlineStatus('Table créée !');
+    setOnlineStatus('Table prête — code ' + roomCode + '. En attente d\'amis...');
     gameStarted = true;
     updateUI();
     showWaiting(true);
+    addLog('Table en ligne créée — code ' + roomCode);
   });
+
   peer.on('connection', (conn) => {
-    conn.on('open', () => {
-      connections[conn.peer] = conn;
-      conn.on('data', (data) => handleHostMessage(conn, data));
-      conn.on('close', () => handlePeerDisconnect(conn.peer));
-    });
+    setupHostConnection(conn);
   });
-  peer.on('error', (err) => setOnlineStatus('Erreur: ' + (err.type || err), true));
+
+  peer.on('error', (err) => {
+    console.error('Host peer error', err);
+    const t = err && err.type;
+    if (t === 'unavailable-id' || t === 'peer-unavailable') {
+      // Code déjà pris : en regénérer un
+      roomCode = genRoomCode();
+      setOnlineStatus('Code pris, nouvel essai...');
+      setTimeout(createOnlineRoom, 400);
+      return;
+    }
+    if (t === 'network' || t === 'server-error' || t === 'socket-error') {
+      setOnlineStatus('Serveur PeerJS indisponible. Réessaie dans 30s ou change de réseau (4G/Wi‑Fi).', true);
+      return;
+    }
+    setOnlineStatus('Erreur hôte: ' + (t || err), true);
+  });
+
+  peer.on('disconnected', () => {
+    setOnlineStatus('Déconnecté du serveur, reconnexion...', true);
+    try { peer.reconnect(); } catch (e) {}
+  });
 }
+
 function joinOnlineRoom() {
-  if (typeof Peer === 'undefined') { setOnlineStatus('PeerJS non chargé.', true); return; }
+  if (typeof Peer === 'undefined') {
+    setOnlineStatus('PeerJS non chargé. Recharge la page avec internet.', true);
+    return;
+  }
   const name = (document.getElementById('onlineNameInput').value || 'Joueur').trim().slice(0, 12);
-  const code = (document.getElementById('joinCodeInput').value || '').trim().toUpperCase();
-  if (code.length < 4) { setOnlineStatus('Code invalide', true); return; }
+  const code = (document.getElementById('joinCodeInput').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length < 4) { setOnlineStatus('Entre le code à 6 caractères', true); return; }
   localStorage.setItem('poker_name', name);
   roomCode = code;
   setOnlineStatus('Connexion à ' + code + '...');
-  if (peer) try { peer.destroy(); } catch (e) {}
-  peer = new Peer({ debug: 1, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } });
+  destroyPeer();
+
+  try {
+    peer = new Peer(PEER_OPTS);
+  } catch (e) {
+    setOnlineStatus('Impossible de démarrer: ' + e.message, true);
+    return;
+  }
+
+  // Timeout si rien ne se passe
+  clearJoinTimeout();
+  joinTimeoutId = setTimeout(() => {
+    setOnlineStatus('Délai dépassé. Vérifie le code, que l\'hôte a bien "Table prête", et réessaie.', true);
+    try { if (peer) peer.destroy(); } catch (e) {}
+  }, 20000);
+
   peer.on('open', (id) => {
     myPeerId = id;
-    hostConn = peer.connect('poker-' + code, { reliable: true });
-    hostConn.on('open', () => {
-      gameMode = 'guest';
-      tableSize = 4;
-      buildSeatsDOM();
-      document.getElementById('startMenu').classList.add('hidden');
-      hostConn.send({ type: 'join', name, chips: loadBankroll() || 1000, peerId: id });
-      document.getElementById('roomCodeBadge').classList.remove('hidden');
-      document.getElementById('roomCodeBadge').innerText = 'CODE ' + code;
-      document.getElementById('tableSubtitle').innerText = 'En ligne — Invité';
-      closeOnlineModal();
-      gameStarted = true;
-      showWaiting(true);
-    });
-    hostConn.on('data', handleGuestMessage);
-    hostConn.on('close', () => { addLog('Déconnecté.'); leaveOnline(true); });
+    setOnlineStatus('Relais OK — liaison avec la table...');
+    // Petit délai pour laisser le signaling se stabiliser
+    setTimeout(() => {
+      try {
+        hostConn = peer.connect('poker-' + code, { reliable: true, serialization: 'json' });
+      } catch (e) {
+        clearJoinTimeout();
+        setOnlineStatus('Échec connect: ' + e.message, true);
+        return;
+      }
+
+      hostConn.on('open', () => {
+        clearJoinTimeout();
+        gameMode = 'guest';
+        tableSize = 4;
+        players = makePlayers(4, 1000);
+        buildSeatsDOM();
+        document.getElementById('startMenu').classList.add('hidden');
+        const chips = loadBankroll() || 1000;
+        hostConn.send({ type: 'join', name: name, chips: chips, peerId: id });
+        document.getElementById('roomCodeBadge').classList.remove('hidden');
+        document.getElementById('roomCodeBadge').innerText = 'CODE ' + code;
+        document.getElementById('tableSubtitle').innerText = 'En ligne — Invité';
+        setOnlineStatus('Connecté ! En attente de confirmation...');
+        closeOnlineModal();
+        gameStarted = true;
+        showWaiting(true);
+        addLog('Connecté à la table ' + code);
+      });
+
+      hostConn.on('data', handleGuestMessage);
+      hostConn.on('close', () => {
+        addLog('Déconnecté de la table.');
+        setOnlineStatus('Connexion fermée par l\'hôte', true);
+      });
+      hostConn.on('error', (err) => {
+        clearJoinTimeout();
+        console.error('Guest conn error', err);
+        setOnlineStatus('Erreur liaison: ' + (err.type || err) + '. Vérifie le code.', true);
+      });
+    }, 300);
   });
-  peer.on('error', () => setOnlineStatus('Impossible de rejoindre', true));
+
+  peer.on('error', (err) => {
+    clearJoinTimeout();
+    console.error('Guest peer error', err);
+    const t = err && err.type;
+    if (t === 'peer-unavailable') {
+      setOnlineStatus('Table introuvable. L\'hôte doit garder la page ouverte avec le code affiché.', true);
+      return;
+    }
+    setOnlineStatus('Impossible de rejoindre (' + (t || 'erreur') + '). Réessaie.', true);
+  });
 }
+
 function handleHostMessage(conn, data) {
   if (!data || !data.type) return;
   if (data.type === 'join') {
     let seat = players.findIndex((p, i) => i > 0 && p.isBot && !p.peerId);
-    if (seat === -1) { conn.send({ type: 'error', message: 'Table pleine' }); return; }
+    if (seat === -1) {
+      try { conn.send({ type: 'error', message: 'Table pleine (4 joueurs max)' }); } catch (e) {}
+      return;
+    }
     players[seat].name = data.name || 'Joueur';
     players[seat].chips = Math.max(0, data.chips || 1000);
-    players[seat].isHuman = true; players[seat].isBot = false;
-    players[seat].peerId = data.peerId || conn.peer; players[seat].avatar = '👤';
-    addLog(`${players[seat].name} a rejoint (${players[seat].chips} $)`);
-    conn.send({ type: 'joined', seatIdx: seat, players: serializePlayers() });
-    broadcastState(); updateUI();
+    players[seat].isHuman = true;
+    players[seat].isBot = false;
+    players[seat].peerId = data.peerId || conn.peer;
+    players[seat].avatar = '👤';
+    players[seat].connected = true;
+    addLog(players[seat].name + ' a rejoint la table (' + players[seat].chips + ' $)');
+    setOnlineStatus(players[seat].name + ' a rejoint ! Tu peux lancer la main.');
+    try {
+      conn.send({ type: 'joined', seatIdx: seat, players: serializePlayers() });
+    } catch (e) { console.error(e); }
+    broadcastState();
+    updateUI();
   } else if (data.type === 'action' && activePlayerIdx === data.seatIdx) {
     applyPlayerAction(data.seatIdx, data.action, data.raiseTotal);
-  } else if (data.type === 'nextHand') startNewHand();
-  else if (data.type === 'rebuy') {
+  } else if (data.type === 'nextHand') {
+    startNewHand();
+  } else if (data.type === 'rebuy') {
     const p = players.find(pl => pl.peerId === conn.peer);
     if (p) { p.chips += 1000; broadcastState(); updateUI(); }
+  } else if (data.type === 'ping') {
+    try { conn.send({ type: 'pong' }); } catch (e) {}
   }
 }
+
 function handleGuestMessage(data) {
   if (!data || !data.type) return;
   if (data.type === 'joined') {
     mySeatIdx = data.seatIdx;
-    if (data.players) applyPlayersSnapshot(data.players);
-    players = data.players || players;
-    tableSize = players.length;
-    buildSeatsDOM();
+    if (data.players) {
+      players = data.players;
+      tableSize = players.length;
+      buildSeatsDOM();
+    }
+    setOnlineStatus('Tu es à la table (siège ' + (mySeatIdx + 1) + '). Attends le lancement.');
+    addLog('Tu as rejoint la table (siège ' + (mySeatIdx + 1) + ').');
     updateUI();
-  } else if (data.type === 'state') applyFullState(data.state);
-  else if (data.type === 'error') setOnlineStatus(data.message, true);
+  } else if (data.type === 'state') {
+    applyFullState(data.state);
+  } else if (data.type === 'error') {
+    setOnlineStatus(data.message || 'Erreur', true);
+    openOnlineModal();
+  } else if (data.type === 'pong') {
+    /* ok */
+  }
 }
+
 function handlePeerDisconnect(peerId) {
   delete connections[peerId];
   const p = players.find(pl => pl.peerId === peerId);
   if (p) {
+    addLog(p.name + ' s\'est déconnecté — siège repris par un bot.');
     p.isHuman = false; p.isBot = true; p.peerId = null;
     const bot = BOT_POOL[(p.id - 1) % BOT_POOL.length];
     p.name = bot.name; p.avatar = bot.avatar;
@@ -693,6 +853,7 @@ function handlePeerDisconnect(peerId) {
     broadcastState(); updateUI();
   }
 }
+
 function serializePlayers() {
   return players.map(p => ({ ...p, cards: [...(p.cards || [])] }));
 }
@@ -705,7 +866,9 @@ function broadcastState() {
     players: serializePlayers(), communityCards: [...communityCards], pot, currentHighBet, lastRaiseSize,
     dealerIdx, activePlayerIdx, currentPhase, handNumber, tableSize
   };
-  Object.values(connections).forEach(conn => { try { conn.send({ type: 'state', state }); } catch (e) {} });
+  Object.values(connections).forEach(conn => {
+    try { if (conn && conn.open) conn.send({ type: 'state', state }); } catch (e) {}
+  });
 }
 function applyFullState(state) {
   if (!state) return;
@@ -740,10 +903,8 @@ function showWaiting(show) {
   }
 }
 function leaveOnline(silent) {
-  try { if (hostConn) hostConn.close(); } catch (e) {}
-  try { Object.values(connections).forEach(c => c.close()); } catch (e) {}
-  try { if (peer) peer.destroy(); } catch (e) {}
-  peer = null; hostConn = null; connections = {}; roomCode = null;
+  destroyPeer();
+  roomCode = null;
   gameMode = 'solo'; mySeatIdx = 0;
   document.getElementById('hostRoomInfo').classList.add('hidden');
   document.getElementById('roomCodeBadge').classList.add('hidden');
