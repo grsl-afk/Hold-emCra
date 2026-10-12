@@ -219,8 +219,8 @@
         <span><i class="fa-solid fa-wallet text-amber-400 mr-1"></i> Ta cagnotte</span>
         <span id="menuBankroll" class="font-black text-amber-300">1000 $</span>
       </div>
-      <button type="button" id="btnResetBankroll" class="hidden w-full bg-rose-800/90 hover:bg-rose-700 text-rose-100 font-bold py-2.5 rounded-xl text-sm border border-rose-500/40 transition">
-        <i class="fa-solid fa-rotate-left mr-2"></i> Remettre à 1 000 $
+      <button type="button" id="btnResetBankroll" class="w-full bg-rose-800/90 hover:bg-rose-700 text-rose-100 font-bold py-2.5 rounded-xl text-sm border border-rose-500/40 transition">
+        <i class="fa-solid fa-rotate-left mr-2"></i> Réinitialiser la cagnotte à 1 000 $
       </button>
 
       <button type="button" id="btnStartSolo" class="w-full bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-black py-3.5 rounded-xl text-base transition shadow-lg active:scale-95">
@@ -720,14 +720,9 @@ function startSoloFromMenu() {
 function refreshMenuBankroll() {
   const bal = loadBankroll();
   const el = document.getElementById('menuBankroll');
-  const btn = document.getElementById('btnResetBankroll');
   if (el) {
     el.innerText = bal + ' $';
     el.className = 'font-black ' + (bal < 1000 ? 'text-rose-400' : 'text-amber-300');
-  }
-  if (btn) {
-    if (bal < 1000) btn.classList.remove('hidden');
-    else btn.classList.add('hidden');
   }
 }
 
