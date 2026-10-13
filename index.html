@@ -756,6 +756,11 @@ function backToMenu() {
 
 function showWinnerModal({ names, handName, amount, cards, isFoldWin }) {
   document.getElementById('winnerTitle').innerText = names.length > 1 ? 'Égalité !' : `${names[0]} gagne !`;
+  // Bouton Continuer : texte différent pour invités
+  const continueBtn = document.querySelector('#winnerModal button');
+  if (continueBtn) {
+    continueBtn.innerText = (gameMode === 'guest') ? 'OK' : 'Continuer';
+  }
   document.getElementById('winnerSubtitle').innerText = isFoldWin
     ? 'Tous les autres joueurs se sont couchés'
     : 'remporte la manche au showdown';
@@ -1043,7 +1048,8 @@ function handleHostMessage(conn, data) {
   } else if (data.type === 'action' && activePlayerIdx === data.seatIdx) {
     applyPlayerAction(data.seatIdx, data.action, data.raiseTotal);
   } else if (data.type === 'nextHand') {
-    startNewHand();
+    // Seul l'hôte peut lancer la main suivante — on ignore les demandes des invités
+    addLog('Demande de main suivante ignorée (seul l\'hôte peut lancer).');
   } else if (data.type === 'rebuy') {
     const p = players.find(pl => pl.peerId === conn.peer);
     if (p) { p.chips += 1000; broadcastState(); updateUI(); }
@@ -1608,6 +1614,11 @@ function updateUI() {
     buildSeatsDOM();
   }
 
+  // Invités : jamais le bouton Main Suivante
+  if (gameMode === 'guest') {
+    const nh = document.getElementById('nextHandContainer');
+    if (nh) nh.classList.add('hidden');
+  }
   document.getElementById('potTotalDisplay').innerText = `${pot} $`;
   document.getElementById('centerPotText').innerText = `Pot : ${pot} $`;
   document.getElementById('phaseBadge').innerText = PHASE_LABELS[currentPhase] || currentPhase;
