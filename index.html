@@ -508,6 +508,7 @@ let aiDifficulty = 'easy'; // easy | medium | hard
 let players = [];
 let deck = [], communityCards = [], pot = 0, currentHighBet = 0, lastRaiseSize = 0;
 let lastBoardCount = 0; // pour l'anim d'apparition carte par carte
+let lastWinnerInfo = null; // résultat de la dernière main (pour invités)
 let dealerIdx = 0, activePlayerIdx = 0, currentPhase = 'PREFLOP';
 let smallBlind = 5, bigBlind = 10;
 let gameLogs = [], handNumber = 0, totalHandsPlayed = 0, startingBankroll = 1000;
@@ -1121,7 +1122,8 @@ function broadcastState() {
   if (gameMode !== 'host') return;
   const state = {
     players: serializePlayers(), communityCards: [...communityCards], pot, currentHighBet, lastRaiseSize,
-    dealerIdx, activePlayerIdx, currentPhase, handNumber, tableSize, onlineFillBots
+    dealerIdx, activePlayerIdx, currentPhase, handNumber, tableSize, onlineFillBots,
+    lastWinnerInfo: lastWinnerInfo || null
   };
   Object.values(connections).forEach(conn => {
     try { if (conn && conn.open) conn.send({ type: 'state', state }); } catch (e) {}
@@ -1156,10 +1158,29 @@ function applyFullState(state) {
   if (currentPhase === 'SHOWDOWN') {
     document.getElementById('actionButtons').classList.add('hidden');
     showWaiting(false);
+    // Afficher le modal gagnant pour les invités si l'info est dans l'état
+    if (gameMode === 'guest' && state.lastWinnerInfo && document.getElementById('winnerModal').classList.contains('hidden')) {
+      const info = state.lastWinnerInfo;
+      const displayNames = (info.names || []).map((n, i) => {
+        const id = (info.winnerIds || [])[i];
+        return id === mySeatIdx ? 'Vous' : n;
+      });
+      showWinnerModal({
+        names: displayNames.length ? displayNames : (info.names || ['Gagnant']),
+        handName: info.handName || '—',
+        amount: info.amount || 0,
+        cards: info.cards || [],
+        isFoldWin: !!info.isFoldWin
+      });
+    }
   } else {
     document.getElementById('nextHandContainer').classList.add('hidden');
     document.getElementById('actionButtons').classList.remove('hidden');
     showWaiting(false);
+    // Cacher le modal si on n'est plus en showdown
+    if (gameMode === 'guest') {
+      document.getElementById('winnerModal').classList.add('hidden');
+    }
   }
   updateUI();
 }
@@ -1229,6 +1250,7 @@ function startNewHand() {
   handNumber++; createDeck(); communityCards = []; pot = 0;
   currentHighBet = 0; lastRaiseSize = bigBlind; currentPhase = 'PREFLOP'; isProcessing = false;
   lastBoardCount = 0;
+  lastWinnerInfo = null;
 
   players.forEach(p => {
     p.cards = []; p.folded = p.chips <= 0; p.isAllIn = false; p.currentBet = 0; p.hasActed = false; p.finalHandName = null;
@@ -1491,6 +1513,14 @@ function resolveShowdown() {
   updateUI(); broadcastState();
   document.getElementById('actionButtons').classList.add('hidden');
   document.getElementById('raiseControls').classList.add('hidden');
+  lastWinnerInfo = {
+    names: winners.map(w => w.name),
+    winnerIds: winners.map(w => w.id),
+    handName: winners[0].finalHandName,
+    amount: potWon,
+    cards: winners[0].cards,
+    isFoldWin: false
+  };
   const modalPayload = {
     names: winners.map(w => w.id === mySeatIdx ? 'Vous' : w.name),
     handName: winners[0].finalHandName,
@@ -1499,15 +1529,8 @@ function resolveShowdown() {
     isFoldWin: false
   };
   showWinnerModal(modalPayload);
-  broadcastWinner({
-    names: winners.map(w => w.name),
-    winnerIds: winners.map(w => w.id),
-    winnerNamesById: Object.fromEntries(winners.map(w => [w.id, w.name])),
-    handName: winners[0].finalHandName,
-    amount: potWon,
-    cards: winners[0].cards,
-    isFoldWin: false
-  });
+  broadcastState(); // re-envoie l'état avec lastWinnerInfo
+  broadcastWinner(lastWinnerInfo);
 }
 
 function endHand(winner) {
@@ -1518,6 +1541,14 @@ function endHand(winner) {
   updateUI(); broadcastState();
   document.getElementById('actionButtons').classList.add('hidden');
   document.getElementById('raiseControls').classList.add('hidden');
+  lastWinnerInfo = {
+    names: [winner.name],
+    winnerIds: [winner.id],
+    handName: 'Victoire par abandon',
+    amount: potWon,
+    cards: winner.cards,
+    isFoldWin: true
+  };
   const modalPayload = {
     names: [winner.id === mySeatIdx ? 'Vous' : winner.name],
     handName: 'Victoire par abandon',
@@ -1526,15 +1557,8 @@ function endHand(winner) {
     isFoldWin: true
   };
   showWinnerModal(modalPayload);
-  broadcastWinner({
-    names: [winner.name],
-    winnerIds: [winner.id],
-    winnerNamesById: { [winner.id]: winner.name },
-    handName: 'Victoire par abandon',
-    amount: potWon,
-    cards: winner.cards,
-    isFoldWin: true
-  });
+  broadcastState(); // re-envoie avec lastWinnerInfo
+  broadcastWinner(lastWinnerInfo);
 }
 
 /** Trouve le siège local (peerId en ligne, sinon mySeatIdx, sinon 0) */
