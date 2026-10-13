@@ -135,6 +135,14 @@
     .board-deal {
       animation: boardDeal 0.4s cubic-bezier(0.22, 1.2, 0.36, 1) both;
     }
+    @keyframes holeDeal {
+      0% { opacity: 0; transform: translateY(-28px) scale(0.45) rotate(-18deg); }
+      65% { opacity: 1; transform: translateY(3px) scale(1.06) rotate(3deg); }
+      100% { opacity: 1; transform: none; }
+    }
+    .hole-deal {
+      animation: holeDeal 0.45s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+    }
 
     /* Header compact mobile */
     #appHeader {
@@ -1275,25 +1283,71 @@ function startNewHand() {
   players.forEach(p => {
     p.cards = []; p.folded = p.chips <= 0; p.isAllIn = false; p.currentBet = 0; p.hasActed = false; p.finalHandName = null;
   });
-  for (let i = 0; i < 2; i++) players.forEach(p => { if (!p.folded) p.cards.push(deck.pop()); });
 
   do { dealerIdx = (dealerIdx + 1) % players.length; } while (players[dealerIdx].chips <= 0);
-  const sbIdx = getNextActiveIdx(dealerIdx);
-  const bbIdx = getNextActiveIdx(sbIdx);
-  makeBet(players[sbIdx], Math.min(smallBlind, players[sbIdx].chips));
-  makeBet(players[bbIdx], Math.min(bigBlind, players[bbIdx].chips));
-  players[sbIdx].hasActed = true; players[bbIdx].hasActed = false;
-  currentHighBet = Math.max(players[sbIdx].currentBet, players[bbIdx].currentBet);
-  lastRaiseSize = bigBlind;
-  activePlayerIdx = getNextActiveIdx(bbIdx);
 
   document.getElementById('nextHandContainer').classList.add('hidden');
   document.getElementById('winnerModal').classList.add('hidden');
-  document.getElementById('actionButtons').classList.remove('hidden');
+  document.getElementById('actionButtons').classList.add('hidden');
   document.getElementById('raiseControls').classList.add('hidden');
   showWaiting(false);
   addLog(`--- Main #${handNumber} --- Dealer: ${players[dealerIdx].name}`);
-  updateUI(); broadcastState(); scheduleNextAction();
+
+  // Joueurs qui reçoivent des cartes, en partant de la gauche du dealer
+  const receivers = [];
+  const start = (dealerIdx + 1) % players.length;
+  for (let i = 0; i < players.length; i++) {
+    const idx = (start + i) % players.length;
+    if (!players[idx].folded) receivers.push(idx);
+  }
+
+  // 2 tours : 1re carte à chacun, puis 2e carte à chacun
+  const dealOrder = [];
+  for (let round = 0; round < 2; round++) receivers.forEach(idx => dealOrder.push(idx));
+
+  let dealStep = 0;
+  isProcessing = true;
+  updateUI();
+
+  function dealNextCard() {
+    if (dealStep >= dealOrder.length) {
+      // Fin de la distribution → blinds + début du tour
+      const sbIdx = getNextActiveIdx(dealerIdx);
+      const bbIdx = getNextActiveIdx(sbIdx);
+      makeBet(players[sbIdx], Math.min(smallBlind, players[sbIdx].chips));
+      makeBet(players[bbIdx], Math.min(bigBlind, players[bbIdx].chips));
+      players[sbIdx].hasActed = true;
+      players[bbIdx].hasActed = false;
+      currentHighBet = Math.max(players[sbIdx].currentBet, players[bbIdx].currentBet);
+      lastRaiseSize = bigBlind;
+      activePlayerIdx = getNextActiveIdx(bbIdx);
+      document.getElementById('actionButtons').classList.remove('hidden');
+      isProcessing = false;
+      updateUI();
+      broadcastState();
+      scheduleNextAction();
+      return;
+    }
+
+    const pIdx = dealOrder[dealStep];
+    players[pIdx].cards.push(deck.pop());
+    dealStep++;
+    updateUI();
+
+    // Animation sur la dernière carte posée
+    const seatMe = resolveMySeat();
+    const visualPos = (pIdx - seatMe + players.length) % players.length;
+    const seatEl = document.getElementById('player-' + visualPos);
+    if (seatEl) {
+      const cards = seatEl.querySelectorAll('.poker-card');
+      const last = cards[cards.length - 1];
+      if (last) last.classList.add('hole-deal');
+    }
+
+    setTimeout(dealNextCard, 320);
+  }
+
+  setTimeout(dealNextCard, 400);
 }
 
 function getNextActiveIdx(fromIdx) {
