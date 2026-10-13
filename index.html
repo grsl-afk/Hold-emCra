@@ -367,7 +367,7 @@
     </div>
     <div id="nextHandContainer" class="hidden">
       <button type="button" id="btnNextHand" onclick="requestNextHand()" class="w-full bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 py-3 px-4 rounded-xl font-black text-sm sm:text-base transition shadow-xl transform active:scale-95 flex items-center justify-center gap-2">
-        <i class="fa-solid fa-play"></i><span>Main Suivante</span>
+        <i class="fa-solid fa-play"></i><span id="btnNextHandText">Main Suivante</span>
       </button>
     </div>
     <div id="waitingOnline" class="hidden text-center py-3 text-sm text-indigo-300 font-bold">
@@ -770,7 +770,15 @@ function showWinnerModal({ names, handName, amount, cards, isFoldWin }) {
 }
 function closeWinnerModal() {
   document.getElementById('winnerModal').classList.add('hidden');
-  document.getElementById('nextHandContainer').classList.remove('hidden');
+  // Seul l'hôte (ou le solo) peut lancer la main suivante
+  if (gameMode === 'guest') {
+    document.getElementById('nextHandContainer').classList.add('hidden');
+    document.getElementById('waitingOnline').classList.remove('hidden');
+    document.getElementById('waitingOnline').innerHTML = '<i class="fa-solid fa-hourglass-half mr-2"></i>En attente de l\'hôte pour la prochaine main...';
+  } else {
+    document.getElementById('nextHandContainer').classList.remove('hidden');
+    document.getElementById('waitingOnline').classList.add('hidden');
+  }
 }
 
 // ========== ONLINE (simplifié, 4 max) ==========
@@ -1157,7 +1165,13 @@ function applyFullState(state) {
   saveGame();
   if (currentPhase === 'SHOWDOWN') {
     document.getElementById('actionButtons').classList.add('hidden');
-    showWaiting(false);
+    document.getElementById('nextHandContainer').classList.add('hidden');
+    if (gameMode === 'guest') {
+      document.getElementById('waitingOnline').classList.remove('hidden');
+      document.getElementById('waitingOnline').innerHTML = '<i class="fa-solid fa-hourglass-half mr-2"></i>En attente de l\'hôte pour la prochaine main...';
+    } else {
+      showWaiting(false);
+    }
     // Afficher le modal gagnant pour les invités si l'info est dans l'état
     if (gameMode === 'guest' && state.lastWinnerInfo && document.getElementById('winnerModal').classList.contains('hidden')) {
       const info = state.lastWinnerInfo;
@@ -1289,8 +1303,12 @@ function getNextCanActIdx(fromIdx) {
   return idx;
 }
 function requestNextHand() {
-  if (gameMode === 'guest') { if (hostConn) hostConn.send({ type: 'nextHand' }); }
-  else startNewHand();
+  // Seul l'hôte ou le mode solo peut lancer la main suivante
+  if (gameMode === 'guest') {
+    addLog('Seul l\'hôte peut lancer la prochaine main.');
+    return;
+  }
+  startNewHand();
 }
 
 function playerAction(action) {
